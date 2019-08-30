@@ -52,6 +52,9 @@ flags.DEFINE_float(
     "Probability of creating sequences which are shorter than the "
     "maximum length.")
 
+flags.DEFINE_bool(
+    "disable_nsp", False,
+    "Whether to use NextSentencePrediction loss.")
 
 class TrainingInstance(object):
   """A single training instance (sentence pair)."""
@@ -184,8 +187,11 @@ def create_training_instances(input_files, tokenizer, max_seq_length,
           break
         line = line.strip()
 
+        # If NSP is disabled, each line is a "document"
+        if FLAGS.disable_nsp and line:
+          all_documents.append([])
         # Empty lines are used as document delimiters
-        if not line:
+        if not FLAGS.disable_nsp and not line:
           all_documents.append([])
         tokens = tokenizer.tokenize(line)
         if tokens:
@@ -256,7 +262,7 @@ def create_instances_from_document(
         tokens_b = []
         # Random next
         is_random_next = False
-        if len(current_chunk) == 1 or rng.random() < 0.5:
+        if not FLAGS.disable_nsp and (len(current_chunk) == 1 or rng.random() < 0.5):
           is_random_next = True
           target_b_length = target_seq_length - len(tokens_a)
 
@@ -297,14 +303,16 @@ def create_instances_from_document(
           tokens.append(token)
           segment_ids.append(0)
 
-        tokens.append("[SEP]")
-        segment_ids.append(0)
+        if not FLAGS.disable_nsp:
+          tokens.append("[SEP]")
+          segment_ids.append(0)
 
+        seg_id = 0 if FLAGS.disable_nsp else 1
         for token in tokens_b:
           tokens.append(token)
-          segment_ids.append(1)
+          segment_ids.append(seg_id)
         tokens.append("[SEP]")
-        segment_ids.append(1)
+        segment_ids.append(seg_id)
 
         (tokens, masked_lm_positions,
          masked_lm_labels) = create_masked_lm_predictions(
@@ -392,10 +400,18 @@ def truncate_seq_pair(tokens_a, tokens_b, max_num_tokens, rng):
 
     # We want to sometimes truncate from the front and sometimes from the
     # back to add more randomness and avoid biases.
-    if rng.random() < 0.5:
-      del trunc_tokens[0]
+    if FLAGS.disable_nsp:
+      # If this is only one segment, always truncate
+      # from the front (tokens_a) or back (tokens_b)
+      if trunc_tokens is tokens_a:
+        del trunc_tokens[0]
+      else:
+        trunc_tokens.pop()
     else:
-      trunc_tokens.pop()
+      if rng.random() < 0.5:
+        del trunc_tokens[0]
+      else:
+        trunc_tokens.pop()
 
 
 def main(_):
@@ -413,6 +429,8 @@ def main(_):
   for input_file in input_files:
     tf.logging.info("  %s", input_file)
 
+  if FLAGS.disable_nsp:
+    tf.logging.info("NSP task disabled - Dummy labels will be added")
   rng = random.Random(FLAGS.random_seed)
   instances = create_training_instances(
       input_files, tokenizer, FLAGS.max_seq_length, FLAGS.dupe_factor,
