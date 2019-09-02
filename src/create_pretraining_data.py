@@ -54,7 +54,7 @@ flags.DEFINE_float(
 
 flags.DEFINE_bool(
     "disable_nsp", False,
-    "Whether to use NextSentencePrediction loss.")
+    "Whether to disable NextSentencePrediction loss.")
 
 class TrainingInstance(object):
   """A single training instance (sentence pair)."""
@@ -290,10 +290,13 @@ def create_instances_from_document(
           is_random_next = False
           for j in range(a_end, len(current_chunk)):
             tokens_b.extend(current_chunk[j])
+        if FLAGS.disable_nsp:
+          assert len(tokens_b) == 0 
         truncate_seq_pair(tokens_a, tokens_b, max_num_tokens, rng)
 
         assert len(tokens_a) >= 1
-        assert len(tokens_b) >= 1
+        if not FLAGS.disable_nsp:
+          assert len(tokens_b) >= 1
 
         tokens = []
         segment_ids = []
@@ -303,16 +306,15 @@ def create_instances_from_document(
           tokens.append(token)
           segment_ids.append(0)
 
-        if not FLAGS.disable_nsp:
-          tokens.append("[SEP]")
-          segment_ids.append(0)
-
-        seg_id = 0 if FLAGS.disable_nsp else 1
-        for token in tokens_b:
-          tokens.append(token)
-          segment_ids.append(seg_id)
         tokens.append("[SEP]")
-        segment_ids.append(seg_id)
+        segment_ids.append(0)
+
+        if not FLAGS.disable_nsp:
+          for token in tokens_b:
+            tokens.append(token)
+            segment_ids.append(1)
+          tokens.append("[SEP]")
+          segment_ids.append(1)
 
         (tokens, masked_lm_positions,
          masked_lm_labels) = create_masked_lm_predictions(
@@ -400,18 +402,10 @@ def truncate_seq_pair(tokens_a, tokens_b, max_num_tokens, rng):
 
     # We want to sometimes truncate from the front and sometimes from the
     # back to add more randomness and avoid biases.
-    if FLAGS.disable_nsp:
-      # If this is only one segment, always truncate
-      # from the front (tokens_a) or back (tokens_b)
-      if trunc_tokens is tokens_a:
-        del trunc_tokens[0]
-      else:
-        trunc_tokens.pop()
+    if rng.random() < 0.5:
+      del trunc_tokens[0]
     else:
-      if rng.random() < 0.5:
-        del trunc_tokens[0]
-      else:
-        trunc_tokens.pop()
+      trunc_tokens.pop()
 
 
 def main(_):
