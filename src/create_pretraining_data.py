@@ -169,7 +169,7 @@ def create_float_feature(values):
 
 def create_training_instances(input_files, tokenizer, max_seq_length,
                               dupe_factor, short_seq_prob, masked_lm_prob,
-                              max_predictions_per_seq, rng):
+                              max_predictions_per_seq, disable_nsp, rng):
   """Create `TrainingInstance`s from raw text."""
   all_documents = [[]]
 
@@ -188,10 +188,10 @@ def create_training_instances(input_files, tokenizer, max_seq_length,
         line = line.strip()
 
         # If NSP is disabled, each line is a "document"
-        if FLAGS.disable_nsp and line:
+        if disable_nsp and line:
           all_documents.append([])
         # Empty lines are used as document delimiters
-        if not FLAGS.disable_nsp and not line:
+        if not disable_nsp and not line:
           all_documents.append([])
         tokens = tokenizer.tokenize(line)
         if tokens:
@@ -208,7 +208,7 @@ def create_training_instances(input_files, tokenizer, max_seq_length,
       instances.extend(
           create_instances_from_document(
               all_documents, document_index, max_seq_length, short_seq_prob,
-              masked_lm_prob, max_predictions_per_seq, vocab_words, rng))
+              masked_lm_prob, max_predictions_per_seq, vocab_words, disable_nsp, rng))
 
   rng.shuffle(instances)
   return instances
@@ -216,7 +216,7 @@ def create_training_instances(input_files, tokenizer, max_seq_length,
 
 def create_instances_from_document(
     all_documents, document_index, max_seq_length, short_seq_prob,
-    masked_lm_prob, max_predictions_per_seq, vocab_words, rng):
+    masked_lm_prob, max_predictions_per_seq, vocab_words, disable_nsp, rng):
   """Creates `TrainingInstance`s for a single document."""
   document = all_documents[document_index]
 
@@ -262,7 +262,7 @@ def create_instances_from_document(
         tokens_b = []
         # Random next
         is_random_next = False
-        if not FLAGS.disable_nsp and (len(current_chunk) == 1 or rng.random() < 0.5):
+        if not disable_nsp and (len(current_chunk) == 1 or rng.random() < 0.5):
           is_random_next = True
           target_b_length = target_seq_length - len(tokens_a)
 
@@ -290,12 +290,12 @@ def create_instances_from_document(
           is_random_next = False
           for j in range(a_end, len(current_chunk)):
             tokens_b.extend(current_chunk[j])
-        if FLAGS.disable_nsp:
+        if disable_nsp:
           assert len(tokens_b) == 0 
         truncate_seq_pair(tokens_a, tokens_b, max_num_tokens, rng)
 
         assert len(tokens_a) >= 1
-        if not FLAGS.disable_nsp:
+        if not disable_nsp:
           assert len(tokens_b) >= 1
 
         tokens = []
@@ -309,7 +309,7 @@ def create_instances_from_document(
         tokens.append("[SEP]")
         segment_ids.append(0)
 
-        if not FLAGS.disable_nsp:
+        if not disable_nsp:
           for token in tokens_b:
             tokens.append(token)
             segment_ids.append(1)
@@ -429,7 +429,7 @@ def main(_):
   instances = create_training_instances(
       input_files, tokenizer, FLAGS.max_seq_length, FLAGS.dupe_factor,
       FLAGS.short_seq_prob, FLAGS.masked_lm_prob, FLAGS.max_predictions_per_seq,
-      rng)
+      FLAGS.disable_nsp, rng)
 
   output_files = FLAGS.output_file.split(",")
   tf.logging.info("*** Writing to output files ***")
