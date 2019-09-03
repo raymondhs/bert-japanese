@@ -1,3 +1,4 @@
 [submodule "bert"]
 	path = bert
-	url = https://github.com/google-research/bert.git
+	url = https://github.com/thorjohnsen/bert.git
+	branch = gpu_optimizations
