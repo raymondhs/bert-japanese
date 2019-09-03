@@ -1,5 +1,8 @@
 # BERT with SentencePiece for Japanese text.
-This is a repository of Japanese BERT model with SentencePiece tokenizer.  
+This is a forked repository of Japanese BERT model with SentencePiece tokenizer. Features added: 
+
+- Disable next sentence loss for training on sentences instead of documents
+- Multi-GPU training based on https://github.com/thorjohnsen/bert/tree/gpu_optimizations
 
 
 ## Pretrained models
